@@ -42,13 +42,14 @@
 #
 # * Sample configuration
 # --------------------------------------------------------------------
-# primitive prmAppmon ocf:vmware:appmonitor \
-# 	params \
-# 		target_resources="dummy01 dummy02" \
-# 		target_resources_ignore_monitor_failure="dummy03" \
-# 	op start interval="0s" timeout="60s" on-fail="restart" \
-# 	op monitor interval="10s" timeout="60s" on-fail="restart" enabled="true" \
-# 	op stop interval="0s" timeout="60s" on-fail="ignore"
+# primitive appmonitor ocf:vmware:appmonitor \
+#  params \
+#    handle_start_fail="dummy01" \	
+#    handle_stop_fail="dummy01 dummy02 dummy03" \	
+#    handle_monitor_fail="dummy01 dummy02" \	
+#  op start interval="0s" timeout="60s" on-fail="restart" \
+#  op monitor interval="10s" timeout="60s" on-fail="restart" \
+#  op stop interval="0s" timeout="60s" on-fail="block"
 # --------------------------------------------------------------------
 #
 #######################################################################
