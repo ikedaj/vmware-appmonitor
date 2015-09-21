@@ -1,0 +1,340 @@
+#!/bin/sh
+#
+# appmonitor OCF RA
+#
+# Copyright (c) 2015 Junko IKEDA <ikedaj@intellilink.co.jp>
+# All rights reserved.
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software Foundation,
+# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+#
+#######################################################################
+# How to setup
+#
+# * Downlod SDK
+# --------------------------------------------------------------------
+# https://www.vmware.com/support/developer/guest-sdk/
+# --------------------------------------------------------------------
+#
+# * Deploy SDK
+# --------------------------------------------------------------------
+# # tar zxf VMware-GuestSDK-9.0.0-782409.tar.gz
+# # cp -pr GuestSDK /opt
+# --------------------------------------------------------------------
+#
+# * Deploy RA
+# --------------------------------------------------------------------
+# # chmod +x appmonitor
+# # mkdir /usr/lib/ocf/resource.d/vmware
+# # cp -p appmonitor /usr/lib/ocf/resource.d/vmware
+# --------------------------------------------------------------------
+#
+# * Sample configuration
+# --------------------------------------------------------------------
+# primitive prmAppmon ocf:vmware:appmonitor \
+# 	params \
+# 		target_resources="dummy01 dummy02" \
+# 		target_resources_ignore_monitor_failure="dummy03" \
+# 	op start interval="0s" timeout="60s" on-fail="restart" \
+# 	op monitor interval="10s" timeout="60s" on-fail="restart" enabled="true" \
+# 	op stop interval="0s" timeout="60s" on-fail="ignore"
+# --------------------------------------------------------------------
+#
+#######################################################################
+# Initialization:
+
+: ${OCF_FUNCTIONS=${OCF_ROOT}/resource.d/heartbeat/.ocf-shellfuncs}
+. ${OCF_FUNCTIONS}
+: ${__OCF_ACTION=$1}
+
+OCF_RESKEY_bin_default=/opt/GuestSDK/bin/bin64/vmware-appmonitor
+OCF_RESKEY_lib_default=/opt/GuestSDK/lib/lib64
+
+: ${OCF_RESKEY_bin=${OCF_RESKEY_bin_default}}
+: ${OCF_RESKEY_lib=${OCF_RESKEY_lib_default}}
+
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${OCF_RESKEY_lib}
+
+#######################################################################
+
+meta_data() {
+	cat <<END
+<?xml version="1.0"?>
+<!DOCTYPE resource-agent SYSTEM "ra-api-1.dtd">
+<resource-agent name="appmonitor" version="1.0">
+<version>1.0</version>
+
+<longdesc lang="en">
+This is a appmonitor Resource Agent. 
+</longdesc>
+<shortdesc lang="en">appmonitor resource agent</shortdesc>
+
+<parameters>
+<parameter name="bin" unique="1">
+<longdesc lang="en">
+Binary for GuestSDK.
+</longdesc>
+<shortdesc lang="en">bin</shortdesc>
+</parameter>
+
+<parameter name="lib" unique="1">
+<longdesc lang="en">
+Library for GuestSDK.
+</longdesc>
+<shortdesc lang="en">lib</shortdesc>
+</parameter>
+
+<parameter name="handle_start_fail" unique="1">
+<longdesc lang="en">
+Target resource name.
+vSphereHA will reboot the node if this resource fails to start.
+Multiple resources can be configured.
+</longdesc>
+<shortdesc lang="en">target resource name</shortdesc>
+</parameter>
+
+<parameter name="handle_monitor_fail" unique="1">
+<longdesc lang="en">
+Target resource name.
+vSphereHA will reboot the node if this resource fails to monitor.
+Multiple resources can be configured.
+</longdesc>
+<shortdesc lang="en">target resource name</shortdesc>
+</parameter>
+
+<parameter name="handle_stop_fail" unique="1">
+<longdesc lang="en">
+Target resource name.
+vSphereHA will reboot the node if this resource fails to stop.
+Multiple resources can be configured.
+</longdesc>
+<shortdesc lang="en">target resource name</shortdesc>
+</parameter>
+
+</parameters>
+
+<actions>
+<action name="start"		timeout="60" />
+<action name="stop"		timeout="60" />
+<action name="monitor"		timeout="60" interval="10" depth="0" start-delay="0" />
+<action name="meta-data"	timeout="5" />
+<action name="validate-all"	timeout="30" />
+</actions>
+</resource-agent>
+END
+}
+
+#######################################################################
+
+appmonitor_usage() {
+	cat <<END
+usage: $0 {start|stop|monitor|validate-all|meta-data}
+
+Expects to have a fully populated OCF RA-compliant environment set.
+END
+}
+
+check_status() {
+
+local flag=0
+local rsc
+local id
+local op
+
+	# Output Example of "crm_mon -1 -o"
+	# 
+	# Operations:
+	# * Node node01:
+	#   dummy: migration-threshold=2 fail-count=2
+	#    + (15) start: rc=0 (ok)
+	#    + (16) monitor: interval=10000ms rc=7 (not running)
+	#    + (19) stop: rc=0 (ok)
+
+	# Read each line from "crm_mon -1 -o"
+	crm_mon -1 -o | while IFS= read i;
+	do
+		# Start search from "Operations:".
+		echo "$i" | egrep "^Operations:$" > /dev/null 2>&1
+		if [ $? -eq 0 ]; then
+			flag=1
+		fi
+
+		# Run search only "this" node.
+		echo "$i" | egrep "^* Node.*: $" > /dev/null 2>&1
+		if [ $? -eq 0 ]; then
+			echo "$i" | grep `uname -n` > /dev/null 2>&1
+			if [ $? -eq 0 ]; then
+				flag=1
+			else
+				flag=0
+			fi
+		fi
+
+		# Ignore blank line.
+		echo "$i" | egrep "^$" > /dev/null 2>&1
+		if [ $? -eq 0 ]; then
+			flag=0
+		fi
+
+		# Search the resource name.
+		if [ ${flag} = 1 ]; then
+			echo "$i" | egrep ": migration-threshold=" > /dev/null 2>&1
+			if [ $? -eq 0 ]; then
+				rsc=$i
+			fi
+
+		# Search the return code of each operation.
+			echo "$i" | egrep "^+ " | egrep -v "Operations|Node|${rsc}" > /dev/null 2>&1
+			if [ $? -eq 0 ]; then
+				echo "$i" | egrep "rc=0 \(ok\)$" > /dev/null 2>&1
+				if [ $? -ne 0 ]; then
+					id=`echo $rsc | cut -d : -f 1`
+					op=`echo $i | awk '{print $3}' | tr -d :`
+					check_handle ${id} ${op}
+					if [ $? -eq 1 ]; then
+		# Print "REBOOT" if there is failure to call vSphereHA.
+						echo "REBOOT"
+						break
+					fi
+				fi
+			fi
+		fi
+	done
+
+	return 0 
+}
+
+check_handle(){
+
+	if [ $2 = start ]; then
+		for i in ${OCF_RESKEY_handle_start_fail}
+		do
+			if [ $i = $1 ]; then
+				ocf_log err "Detect start failure, rsc=$1"
+				return 1
+			fi
+		done
+	elif [ $2 = stop ]; then
+		for i in ${OCF_RESKEY_handle_stop_fail}
+		do
+			if [ $i = $1 ]; then
+				ocf_log err "Detect stop failure, rsc=$1"
+				return 1
+			fi
+		done
+	else # $2=monitor
+		for i in ${OCF_RESKEY_handle_monitor_fail}
+		do
+			if [ $i = $1 ]; then
+				ocf_log err "Detect monitor failure, rsc=$1"
+				return 1
+			fi
+		done
+	fi
+
+	return 0 
+}
+
+appmonitor_start() {
+	appmonitor_validate
+
+	# Start vSphereHA heartbeat.
+	${OCF_RESKEY_bin} enable
+	${OCF_RESKEY_bin} isEnabled
+
+	if [ $? -eq 1 ]; then
+		ocf_log info "Success enable."
+		return $OCF_SUCCESS
+	else
+		ocf_log err "Failed enable."
+		return $OCF_ERR_GENERIC
+	fi
+}
+
+appmonitor_stop() {
+
+	local status
+	status=`check_status`
+	if [ ! ${status} ]; then # The output of check_status function is null.
+		# Stop vSphereHA heartbeat.
+		${OCF_RESKEY_bin} disable
+
+		if [ $? -eq 0 ]; then
+			# vSphereHA won't be called.
+			ocf_log info "Success disable."
+			return $OCF_SUCCESS
+		else
+			# Wait VM reboot by vSphereHA.
+			ocf_log err "Failed disable."
+			return $OCF_ERR_GENERIC
+		fi
+	elif [ ${status} = "REBOOT" ]; then # The output of check_status function is "REBOOT".
+		# Wait VM reboot by vSphereHA.
+		ocf_log err "don't disable."
+		return $OCF_SUCCESS
+	else
+		ocf_log err "Unexpected error."
+		return $OCF_ERR_GENERIC
+	fi
+}
+
+appmonitor_monitor() {
+	ocf_is_probe && exit $OCF_NOT_RUNNING
+
+	local status
+	status=`check_status`
+	if [ ! ${status} ]; then # The output of check_status function is null.
+		# Send vSphereHA heartbeat.
+		${OCF_RESKEY_bin} markActive
+
+		if [ $? -eq 0 ]; then
+			ocf_log debug "Success markActive."
+			return $OCF_SUCCESS
+		else
+			ocf_log err "Failed markActive."
+			return $OCF_NOT_RUNNING 
+		fi
+	elif [ ${status} = "REBOOT" ]; then # The output of check_status function is "REBOOT".
+		# Stop sending heartbeat to vSphereHA because there are some failures.
+		ocf_log err "don't markActive."
+		return $OCF_NOT_RUNNING
+	else
+		ocf_log err "Unexpected error."
+		return $OCF_ERR_GENERIC
+	fi
+}
+
+appmonitor_validate() {
+	check_binary ${OCF_RESKEY_bin}
+}
+
+case $__OCF_ACTION in
+meta-data)	meta_data
+		exit $OCF_SUCCESS
+		;;
+start)		appmonitor_start;;
+stop)		appmonitor_stop;;
+monitor)	appmonitor_monitor;;
+validate-all)	appmonitor_validate;;
+usage|help)	appmonitor_usage
+		exit $OCF_SUCCESS
+		;;
+*)		appmonitor_usage
+		exit $OCF_ERR_UNIMPLEMENTED
+		;;
+esac
+rc=$?
+ocf_log debug "${OCF_RESOURCE_INSTANCE} $__OCF_ACTION : $rc"
+exit $rc
+

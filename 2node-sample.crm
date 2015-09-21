@@ -1,0 +1,55 @@
+### Cluster Option ###
+property no-quorum-policy="ignore" \
+	stonith-enabled="false" \
+	startup-fencing="false" \
+	crmd-transition-delay="2s" \
+	pe-input-series-max="0" \
+	pe-error-series-max="0" \
+	pe-warn-series-max="0" \
+
+### Resource Defaults ###
+rsc_defaults resource-stickiness="INFINITY" \
+	migration-threshold="1"
+
+### Primitive Configuration ###
+primitive appmonitor ocf:vmware:appmonitor \
+    params \
+	handle_start_fail="dummy03" \	
+	handle_stop_fail="dummy01 dummy02 dummy03" \	
+    op start interval="0s" timeout="60s" on-fail="restart" \
+    op monitor interval="10s" timeout="60s" on-fail="restart" \
+    op stop interval="0s" timeout="60s" on-fail="block"
+
+primitive dummy01 ocf:pacemaker:Dummy \
+    op start interval="0s" timeout="100s" on-fail="restart" \
+    op monitor interval="10s" timeout="100s" on-fail="restart" \
+    op stop interval="0s" timeout="100s" on-fail="block"
+
+primitive dummy02 ocf:pacemaker:Dummy \
+    meta \
+	migration-threshold="2" \
+    op start interval="0s" timeout="100s" on-fail="restart" \
+    op monitor interval="10s" timeout="100s" on-fail="restart" \
+    op stop interval="0s" timeout="100s" on-fail="block"
+
+primitive dummy03 ocf:pacemaker:Dummy \
+    meta \
+	migration-threshold="2" \
+    op start interval="0s" timeout="100s" on-fail="restart" \
+    op monitor interval="10s" timeout="100s" on-fail="restart" \
+    op stop interval="0s" timeout="100s" on-fail="block"
+
+### Resource Location ###
+location rsc_location-1 appmonitor \
+    rule 200: #uname eq centos6-node01 \
+    rule 100: #uname eq centos6-node02
+
+### Resource Colocation ###
+colocation rsc_colocation-1 INFINITY: dummy01 appmonitor 
+colocation rsc_colocation-2 INFINITY: dummy02 appmonitor 
+colocation rsc_colocation-3 INFINITY: dummy03 appmonitor 
+
+### Resource Order ###
+order rsc_order-1 0: appmonitor dummy01 symmetrical=true
+order rsc_order-2 0: appmonitor dummy02 symmetrical=true
+order rsc_order-3 0: appmonitor dummy03 symmetrical=true

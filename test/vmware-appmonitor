@@ -1,0 +1,21 @@
+#!/bin/sh
+
+case ${1} in
+enable)
+        exit 0
+        ;;
+disable)
+        exit 0
+        ;;
+isEnabled)
+        exit 1
+        #exit 0
+        ;;
+markActive)
+	echo "### markActive ###" >&2 
+        exit 0
+        ;;
+*)
+        exit 1
+        ;;
+esac
