@@ -8,12 +8,12 @@ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${APPMON_LIB}
 function modify-cib() {
 # Edit the id for primitive resource
 # ex. prmAppmon-monitor-10s
-#	resource name = prmAppmon
+#	resource name = appmonitor
 #	operaion = monitor
 #	interval = 10s
 
 	echo "Try to modify CIB"
-	cibadmin --modify --xml-text '<op id="prmAppmon-monitor-10s" enabled=${1}/>'
+	cibadmin --modify --xml-text '<op id="appmonitor-monitor-10s" enabled=${1}/>'
 	[ $? -eq 0 ] && return 0 || echo "Failed to modify CIB ${1}"; exit 3
 }
 
