@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# HOT TO SETUP
+# HOW TO SETUP
 # mkdir -p /opt/GuestSDK/bin/bin64
 # cp -p vmware-appmonitor /opt/GuestSDK/bin/bin64
 # chmod +x /opt/GuestSDK/bin/bin64/vmware-appmonitor
