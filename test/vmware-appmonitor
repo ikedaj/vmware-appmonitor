@@ -1,5 +1,10 @@
 #!/bin/sh
 
+# HOT TO SETUP
+# mkdir -p /opt/GuestSDK/bin/bin64
+# cp -p vmware-appmonitor /opt/GuestSDK/bin/bin64
+# chmod +x /opt/GuestSDK/bin/bin64/vmware-appmonitor
+
 case ${1} in
 enable)
         exit 0
