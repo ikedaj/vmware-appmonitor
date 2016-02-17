@@ -39,7 +39,7 @@ function crm-status() {
 }
 
 function mode-status() {
-	crm configure show | grep 'maintenance-mode="true"' >/dev/null 2>&1
+	crm configure show | grep 'maintenance-mode=.*true' >/dev/null 2>&1
 	if [ $? -eq 0 ]; then
 		echo "Current maintenance-mode status is true"
 		return 0	 
